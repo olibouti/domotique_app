@@ -6,12 +6,13 @@ import '../models/esp_pin.dart';
 class DBHelper {
   static Database? _db;
 
+  // ----------------- Initialisation DB -----------------
   static Future<Database> getDb() async {
     if (_db != null) return _db!;
 
     _db = await openDatabase(
       join(await getDatabasesPath(), 'domotique.db'),
-      version: 1,
+      version: 2, // version 2 pour inclure wifi
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE devices(
@@ -21,6 +22,7 @@ class DBHelper {
             publicIP TEXT
           )
         ''');
+
         await db.execute('''
           CREATE TABLE pins(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,19 +35,29 @@ class DBHelper {
           )
         ''');
 
+        await db.execute('''
+          CREATE TABLE wifi(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ssid TEXT
+          )
+        ''');
       },
-       onUpgrade: (db, oldVersion, newVersion) async {
+      onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
-          // ⚡️ Ajouter la colonne iconName si elle n'existe pas
-          await db.execute(
-              "ALTER TABLE pins ADD COLUMN iconName TEXT DEFAULT 'device_hub'");
+          // Ajouter table wifi si elle n'existe pas
+          await db.execute('''
+            CREATE TABLE wifi(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              ssid TEXT
+            )
+          ''');
         }
       },
     );
     return _db!;
   }
 
-  // Devices
+  // ----------------- Devices -----------------
   static Future<int> insertDevice(ESPDevice device) async {
     final db = await getDb();
     return await db.insert('devices', {
@@ -60,7 +72,7 @@ class DBHelper {
     return await db.query('devices');
   }
 
-  // Pins
+  // ----------------- Pins -----------------
   static Future<int> insertPin(ESPPin pin, int deviceId) async {
     final db = await getDb();
     return await db.insert('pins', {
@@ -79,6 +91,30 @@ class DBHelper {
 
   static Future<void> updatePinState(int id, bool state) async {
     final db = await getDb();
-    await db.update('pins', {'state': state ? 1 : 0}, where: 'id=?', whereArgs: [id]);
+    await db.update(
+      'pins',
+      {'state': state ? 1 : 0},
+      where: 'id=?',
+      whereArgs: [id],
+    );
+  }
+
+  // ----------------- Wi-Fi -----------------
+  static Future<void> setWifiName(String ssid) async {
+    final db = await getDb();
+
+    // On supprime l'ancien ssid pour n'avoir qu'une seule entrée
+    await db.delete('wifi');
+
+    await db.insert('wifi', {'ssid': ssid});
+  }
+
+  static Future<String?> getWifiName() async {
+    final db = await getDb();
+    final list = await db.query('wifi', limit: 1);
+    if (list.isNotEmpty) {
+      return list.first['ssid'] as String;
+    }
+    return null;
   }
 }

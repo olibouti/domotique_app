@@ -50,6 +50,9 @@
 		<string>fetch</string>
 	</array>
 	<key>NSAppTransportSecurity</key>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Votre SSID est utilisé pour déterminer le réseau local.</string>
+
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>

@@ -6,6 +6,7 @@ import '../services/esp_service.dart';
 import 'deviceControl_screen.dart';
 import 'settings_screen.dart';
 import 'package:logger/logger.dart';
+import '../services/network_service.dart';
 
 final logger = Logger();
 
@@ -21,19 +22,35 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<int, bool> deviceStatus = {};
   Map<int, Map<String, bool>> pinsStatus = {}; // deviceId -> états des pins
   bool loading = true;
+  String connectionMode = '';
 
   @override
   void initState() {
     super.initState();
     _loadDevices();
+    _detectConnectionMode();
+  }
+
+  Future<void> _detectConnectionMode() async {
+    final rawSsid = await NetworkService.getWifiName();
+    final savedSsid = await DBHelper.getWifiName();
+
+    final currentSsid = rawSsid?.replaceAll('"', '').replaceAll("'", "").trim();
+
+    if (currentSsid != null &&
+        savedSsid != null &&
+        currentSsid.toLowerCase() == savedSsid.toLowerCase()) {
+      setState(() => connectionMode = "Local");
+    } else {
+      setState(() => connectionMode = "Externe");
+    }
   }
 
   Future<void> _loadDevices() async {
-    logger.i("🔹 _loadDevices START");
     setState(() => loading = true);
+    await _detectConnectionMode();
 
     final dbDevices = await DBHelper.getDevices();
-    logger.i("🔹 DB devices loaded: ${dbDevices.length}");
 
     if (dbDevices.isEmpty) {
       setState(() {
@@ -42,7 +59,6 @@ class _HomeScreenState extends State<HomeScreen> {
         pinsStatus = {};
         loading = false;
       });
-      logger.i("🔹 No devices found");
       return;
     }
 
@@ -52,20 +68,24 @@ class _HomeScreenState extends State<HomeScreen> {
     for (var d in dbDevices) {
       final pinsData = await DBHelper.getPins(d['id']);
       final pins = pinsData
-          .map((p) => ESPPin(
-                name: p['name'],
-                pin: p['pin'],
-                state: p['state'] == 1,
-                iconName: p['iconName'] ?? 'device_hub',
-              ))
+          .map(
+            (p) => ESPPin(
+              name: p['name'],
+              pin: p['pin'],
+              state: p['state'] == 1,
+              iconName: p['iconName'] ?? 'device_hub',
+            ),
+          )
           .toList();
 
-      loaded.add(ESPDevice(
-        name: d['name'],
-        localIP: d['localIP'],
-        publicIP: d['publicIP'],
-        pins: pins,
-      ));
+      loaded.add(
+        ESPDevice(
+          name: d['name'],
+          localIP: d['localIP'],
+          publicIP: d['publicIP'],
+          pins: pins,
+        ),
+      );
     }
 
     Map<int, bool> statusMap = {};
@@ -92,7 +112,6 @@ class _HomeScreenState extends State<HomeScreen> {
       pinsStatus = pinsMap;
       loading = false;
     });
-    logger.i("🔹 _loadDevices END");
   }
 
   @override
@@ -106,67 +125,65 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
-          child: Image.asset(
-            'assets/ic_launcher.png',
-            width: 32,
-            height: 32,
-          ),
+          child: Image.asset('assets/ic_launcher.png', width: 32, height: 32),
         ),
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : devices.isEmpty
-              ? const Center(
-                  child: Text(
-                    "Aucun device enregistré.\nAjoutez-en depuis les paramètres.",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadDevices,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: devices.length,
-                    itemBuilder: (_, index) {
-                      final device = devices[index];
-                      final connected = deviceStatus[device.hashCode] ?? false;
-                      final pins = pinsStatus[device.hashCode] ?? {};
-                      final pinsOn = pins.values.where((v) => v).length;
+          ? const Center(
+              child: Text(
+                "Aucun device enregistré.\nAjoutez-en depuis les paramètres.",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadDevices,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: devices.length,
+                itemBuilder: (_, index) {
+                  final device = devices[index];
+                  final connected = deviceStatus[device.hashCode] ?? false;
+                  final pins = pinsStatus[device.hashCode] ?? {};
+                  final pinsOn = pins.values.where((v) => v).length;
 
-                      return Card(
-                        elevation: 4,
-                        margin: const EdgeInsets.symmetric(vertical: 8),
-                        child: ListTile(
-                          leading: Icon(
-                            connected ? Icons.wifi : Icons.wifi_off,
-                            color: connected ? Colors.green : Colors.red,
-                            size: 40,
-                          ),
-                          title: Text(device.name,
-                              style: const TextStyle(fontSize: 20)),
-                          subtitle: Text(
-                            connected
-                                ? "$pinsOn/${device.pins.length} pins allumées"
-                                : "Déconnecté",
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                          onTap: connected
-                              ? () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          DeviceControlScreen(device: device),
-                                    ),
-                                  ).then((_) => _loadDevices());
-                                }
-                              : null,
-                        ),
-                      );
-                    },
-                  ),
-                ),
+                  return Card(
+                    elevation: 4,
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    child: ListTile(
+                      leading: Icon(
+                        connected ? Icons.wifi : Icons.wifi_off,
+                        color: connected ? Colors.green : Colors.red,
+                        size: 40,
+                      ),
+                      title: Text(
+                        device.name,
+                        style: const TextStyle(fontSize: 20),
+                      ),
+                      subtitle: Text(
+                        connected
+                            ? "$pinsOn/${device.pins.length} pins allumées"
+                            : "Déconnecté",
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      onTap: connected
+                          ? () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      DeviceControlScreen(device: device),
+                                ),
+                              ).then((_) => _loadDevices());
+                            }
+                          : null,
+                    ),
+                  );
+                },
+              ),
+            ),
       bottomNavigationBar: BottomAppBar(
         color: Colors.blueGrey[50],
         child: Padding(
@@ -174,18 +191,40 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              IconButton(
-                icon: const Icon(Icons.refresh, color: Colors.green),
-                onPressed: _loadDevices,
+              // ⚡ Indication connexion locale / externe
+              Text(
+                connectionMode.isNotEmpty
+                    ? "Connexion : $connectionMode"
+                    : "Connexion : inconnue",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: connectionMode == "Local"
+                      ? Colors.green
+                      : connectionMode == "Externe"
+                      ? Colors.red
+                      : Colors.black,
+                ),
               ),
-              IconButton(
-                icon: const Icon(Icons.settings, color: Colors.blue),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                  ).then((_) => _loadDevices());
-                },
+
+              // ⚡ Boutons
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.refresh, color: Colors.green),
+                    onPressed: _loadDevices,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.settings, color: Colors.blue),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SettingsScreen(),
+                        ),
+                      ).then((_) => _loadDevices());
+                    },
+                  ),
+                ],
               ),
             ],
           ),
