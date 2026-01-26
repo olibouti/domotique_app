@@ -8,6 +8,7 @@ import 'services/esp_service.dart';
 import 'services/network_service.dart';
 import 'models/esp_device.dart';
 import 'models/esp_pin.dart';
+import 'services/foreground_service.dart';
 
 
 
@@ -39,11 +40,11 @@ void callbackDispatcher() {
           pin.state = status[pin.pin] ?? false;
           if (oldState != pin.state) {
             await DBHelper.updatePinState(pins.indexOf(pin)+1, pin.state);
-            NotificationService.show(pin.name, "Nouvel état : ${pin.state ? "ON" : "OFF"}");
+            NotificationService().show(pin.name, "Nouvel état : ${pin.state ? "ON" : "OFF"}");
           }
         }
       } catch (e) {
-        NotificationService.show("Erreur", "Impossible de synchroniser ${espDevice.name}");
+        NotificationService().show("Erreur", "Impossible de synchroniser ${espDevice.name}");
       }
     }
 
@@ -60,7 +61,7 @@ void main() async {
   ]);
 
   // Initialiser notifications
-  await NotificationService.init();
+  await NotificationService().initNotifications();
 
   // Initialiser workmanager
   Workmanager().initialize(
@@ -76,6 +77,8 @@ void main() async {
     initialDelay: const Duration(seconds: 10),
     existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
   );
+
+    await ESPForegroundService().start();
 
 
   runApp(const MyApp());

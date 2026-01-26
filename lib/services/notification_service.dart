@@ -1,34 +1,59 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
-  static final _notifications = FlutterLocalNotificationsPlugin();
+  // Singleton pattern pour pouvoir accéder partout
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
 
-  static Future<void> init() async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings(); // pour l'initialisation
-    const initSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings, // correct
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  /// Initialise les notifications
+  Future<void> initNotifications() async {
+    const AndroidInitializationSettings androidInit =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const InitializationSettings initSettings = InitializationSettings(
+      android: androidInit,
+      iOS: DarwinInitializationSettings(),
     );
 
-    await _notifications.initialize(initSettings);
+    await flutterLocalNotificationsPlugin.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (details) {
+        // Gestion de la notification lorsqu'elle est tapée
+      },
+    );
+
+    // Demande la permission sur Android 13+
+    final androidImplementation =
+        flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    await androidImplementation?.requestNotificationsPermission();
   }
 
-  static Future<void> show(String title, String body) async {
+  /// Affiche une notification
+  Future<void> show(String title, String body) async {
     const androidDetails = AndroidNotificationDetails(
-      'channel_id', 'Domotique Notifications',
+      'channel_id', 
+      'Domotique Notifications',
       importance: Importance.max,
       priority: Priority.high,
     );
 
-    // Attention : DarwinNotificationDetails et non InitializationSettings
     const iosDetails = DarwinNotificationDetails();
 
-    const notificationDetails = NotificationDetails(
+    final notificationDetails = NotificationDetails(
       android: androidDetails,
-      iOS: iosDetails, // correct
+      iOS: iosDetails,
     );
 
-    await _notifications.show(0, title, body, notificationDetails);
+    await flutterLocalNotificationsPlugin.show(
+      0, 
+      title, 
+      body, 
+      notificationDetails,
+    );
   }
 }

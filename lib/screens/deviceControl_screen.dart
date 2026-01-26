@@ -26,7 +26,7 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
     super.initState();
     device = widget.device;
     espService = ESPService(device: device);
-    NotificationService.init();
+    NotificationService().initNotifications();
     _loadStatus();
   }
 
@@ -40,7 +40,7 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
         }
       });
     } catch (e) {
-      NotificationService.show(
+      NotificationService().show(
           "Erreur", "Impossible de récupérer le statut des pins");
     } finally {
       setState(() => loading = false);
@@ -55,11 +55,11 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
         final pinIndex = device.pins.indexOf(pin);
         await DBHelper.updatePinState(pinIndex + 1, pin.state);
       } else {
-        NotificationService.show(
+        NotificationService().show(
             "Erreur", "L'ESP n'a pas répondu pour ${pin.name}");
       }
     } catch (e) {
-      NotificationService.show(
+      NotificationService().show(
           "Erreur", "Impossible de changer l'état de ${pin.name}");
     }
   }

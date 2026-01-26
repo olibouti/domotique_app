@@ -20,7 +20,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<ESPDevice> devices = [];
   Map<int, bool> deviceStatus = {};
-  Map<int, Map<String, bool>> pinsStatus = {}; // deviceId -> états des pins
+  Map<int, Map<String, bool>> pinsStatus = {};
   bool loading = true;
   String connectionMode = '';
 
@@ -40,9 +40,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (currentSsid != null &&
         savedSsid != null &&
         currentSsid.toLowerCase() == savedSsid.toLowerCase()) {
-      setState(() => connectionMode = "Local");
+      setState(() => connectionMode = "local");
     } else {
-      setState(() => connectionMode = "Externe");
+      setState(() => connectionMode = "externe");
     }
   }
 
@@ -119,6 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.blueAccent,
+
         title: const Text(
           "Mes Appareils Connectés",
           style: TextStyle(color: Colors.white),
@@ -138,52 +139,89 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: TextStyle(fontSize: 16),
               ),
             )
-          : RefreshIndicator(
-              onRefresh: _loadDevices,
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: devices.length,
-                itemBuilder: (_, index) {
-                  final device = devices[index];
-                  final connected = deviceStatus[device.hashCode] ?? false;
-                  final pins = pinsStatus[device.hashCode] ?? {};
-                  final pinsOn = pins.values.where((v) => v).length;
+          : Container(
+              decoration: const BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage('assets/ic_launcher.png'), // ton image
+                  fit: BoxFit.contain, 
+                ),
+              ),
+              child: Column(
+                children: [
+                  // Liste des appareils qui prend tout l'espace disponible
+                  Expanded(
+                    child: RefreshIndicator(
+                      onRefresh: _loadDevices,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: devices.length,
+                        itemBuilder: (_, index) {
+                          final device = devices[index];
+                          final connected =
+                              deviceStatus[device.hashCode] ?? false;
+                          final pins = pinsStatus[device.hashCode] ?? {};
+                          final pinsOn = pins.values.where((v) => v).length;
 
-                  return Card(
-                    elevation: 4,
-                    margin: const EdgeInsets.symmetric(vertical: 8),
-                    child: ListTile(
-                      leading: Icon(
-                        connected ? Icons.wifi : Icons.wifi_off,
-                        color: connected ? Colors.green : Colors.red,
-                        size: 40,
+                          return Card(
+                            elevation: 30,
+                            color: Colors.white.withValues(alpha: 0.7),
+                            margin: const EdgeInsets.symmetric(vertical: 8),
+                            child: ListTile(
+                              leading: Icon(
+                                connected ? Icons.wifi : Icons.wifi_off,
+                                color: connected ? Colors.green : Colors.red,
+                                size: 40,
+                              ),
+                              title: Text(
+                                device.name,
+                                style: const TextStyle(fontSize: 20),
+                              ),
+                              subtitle: Text(
+                                connected
+                                    ? "$pinsOn/${device.pins.length} pins allumées"
+                                    : "Déconnecté",
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                              onTap: connected
+                                  ? () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => DeviceControlScreen(
+                                            device: device,
+                                          ),
+                                        ),
+                                      ).then((_) => _loadDevices());
+                                    }
+                                  : null,
+                            ),
+                          );
+                        },
                       ),
-                      title: Text(
-                        device.name,
-                        style: const TextStyle(fontSize: 20),
-                      ),
-                      subtitle: Text(
-                        connected
-                            ? "$pinsOn/${device.pins.length} pins allumées"
-                            : "Déconnecté",
-                        style: const TextStyle(fontSize: 14),
-                      ),
-                      onTap: connected
-                          ? () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      DeviceControlScreen(device: device),
-                                ),
-                              ).then((_) => _loadDevices());
-                            }
-                          : null,
                     ),
-                  );
-                },
+                  ),
+
+                  // ⚡ Texte au bas de la page, au-dessus du BottomAppBar
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Text(
+                      connectionMode.isNotEmpty
+                          ? "Connecté au réseau  $connectionMode"
+                          : "Connexion : inconnue",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color:
+                            connectionMode == "local" ||
+                                connectionMode == "externe"
+                            ? const Color.fromARGB(255, 104, 167, 209)
+                            : const Color.fromARGB(255, 255, 0, 0),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
+
       bottomNavigationBar: BottomAppBar(
         color: Colors.blueGrey[50],
         child: Padding(
@@ -191,21 +229,6 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // ⚡ Indication connexion locale / externe
-              Text(
-                connectionMode.isNotEmpty
-                    ? "Connexion : $connectionMode"
-                    : "Connexion : inconnue",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: connectionMode == "Local"
-                      ? Colors.green
-                      : connectionMode == "Externe"
-                      ? Colors.red
-                      : Colors.black,
-                ),
-              ),
-
               // ⚡ Boutons
               Row(
                 children: [
