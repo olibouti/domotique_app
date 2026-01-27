@@ -13,25 +13,28 @@ class ESPService {
   ESPService({required this.device});
 
 Future<Uri> _getBaseUrl(String path) async {
-  final rawSsid = await NetworkService.getWifiName();  // peut contenir des quotes
-  final savedSsid = await DBHelper.getWifiName();
+  final localUrl = Uri.parse('${device.localIP}$path');
+  final publicUrl = Uri.parse('${device.publicIP}$path');
 
-  // Nettoyage : trim + enlever guillemets doubles ou simples
-  final currentSsid = rawSsid?.replaceAll('"', '').replaceAll("'", "").trim();
+  // 1️⃣ Tentative locale rapide
+  try {
+    final res = await http
+        .get(localUrl)
+        .timeout(const Duration(milliseconds: 800));
 
-
-
-  if (currentSsid != null && savedSsid != null &&
-      currentSsid.toLowerCase() == savedSsid.toLowerCase()) {
-    final url = Uri.parse('${device.localIP}$path');
-    logger.i('💡 URL choisie (locale) : $url');
-    return url;
+    if (res.statusCode == 200) {
+      logger.i('💡 URL locale OK : $localUrl');
+      return localUrl;
+    }
+  } catch (_) {
+    // silence volontaire
   }
 
-  final url = Uri.parse('${device.publicIP}$path');
-  logger.i('💡 URL choisie (publique) : $url');
-  return url;
+  // 2️⃣ Fallback public
+  logger.i('💡 Fallback URL publique : $publicUrl');
+  return publicUrl;
 }
+
 
 
 

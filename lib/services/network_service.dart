@@ -15,7 +15,6 @@ class NetworkService {
   /// Renvoie true si connecté à un Wi-Fi
   static Future<bool> isLocalNetwork() async {
     final result = await Connectivity().checkConnectivity();
-    logger.i('Connectivity result: $result');
     return result == ConnectivityResult.wifi;
   }
 
@@ -31,7 +30,6 @@ class NetworkService {
       }
 
       final ssid = await info.getWifiName();
-      logger.i('SSID détecté: $ssid');
       return ssid;
     } catch (e) {
       logger.w('Impossible de récupérer le SSID: $e');

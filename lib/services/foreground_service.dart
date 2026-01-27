@@ -1,35 +1,29 @@
-// lib/services/esp_foreground_service.dart
 import 'dart:async';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:logger/logger.dart';
+
 import '../models/esp_device.dart';
-import 'esp_service.dart';
-import 'notification_service.dart';
+import '../services/esp_service.dart';
+import '../services/notification_service.dart';
+import '../services/db_helper.dart';
 
 final logger = Logger();
 
-/// Singleton pour gérer le service de monitoring
+/// -------------------------------
+/// SERVICE FOREGROUND (UI)
+/// -------------------------------
 class ESPForegroundService {
-  static final ESPForegroundService _instance = ESPForegroundService._internal();
+  static final ESPForegroundService _instance =
+      ESPForegroundService._internal();
   factory ESPForegroundService() => _instance;
   ESPForegroundService._internal();
 
-  /// Liste des ESP à surveiller
-  final List<ESPDevice> devices = [];
-
-  /// Intervalle de vérification en secondes (défaut 10s)
-  int intervalSeconds = 10;
-
-  /// Démarre le service foreground
   Future<void> start({int intervalSeconds = 10}) async {
-    this.intervalSeconds = intervalSeconds;
-
-    // ⚙️ Initialisation du plugin
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'esp_monitoring',
         channelName: 'ESP Monitoring',
-        channelDescription: 'Surveillance des ESP8266',
+        channelDescription: 'Surveillance des ESP',
         onlyAlertOnce: true,
       ),
       iosNotificationOptions: const IOSNotificationOptions(
@@ -37,112 +31,131 @@ class ESPForegroundService {
         playSound: false,
       ),
       foregroundTaskOptions: ForegroundTaskOptions(
-        eventAction: ForegroundTaskEventAction.repeat(intervalSeconds * 1000),
+        eventAction:
+            ForegroundTaskEventAction.repeat(intervalSeconds * 1000),
         autoRunOnBoot: false,
         autoRunOnMyPackageReplaced: true,
         allowWakeLock: true,
-        allowWifiLock: false,
       ),
     );
 
-    // ⚡ Démarrage du service
     await FlutterForegroundTask.startService(
       notificationTitle: 'Monitoring ESP',
-      notificationText: 'Surveillance des ESP en cours',
+      notificationText: 'Surveillance en cours',
       callback: startCallback,
     );
 
-    // Initialise le port de communication
     FlutterForegroundTask.initCommunicationPort();
   }
 
-  /// Arrête le service
   Future<void> stop() async {
     await FlutterForegroundTask.stopService();
   }
+
+  /// À appeler APRÈS ajout/suppression d’un device
+  void reloadDevices() {
+    FlutterForegroundTask.sendDataToTask({
+      'action': 'reload_devices',
+    });
+  }
 }
 
-/// Callback top-level pour le service
+/// -------------------------------
+/// CALLBACK ISOLATE
+/// -------------------------------
 @pragma('vm:entry-point')
 void startCallback() {
   FlutterForegroundTask.setTaskHandler(ESPTaskHandler());
 }
 
-/// TaskHandler du service foreground
+/// -------------------------------
+/// TASK HANDLER (SERVICE)
+/// -------------------------------
 class ESPTaskHandler extends TaskHandler {
+  final List<ESPDevice> _devices = [];
   final Map<int, bool> _lastStates = {};
 
-  /// Called when the task is started
+  /// Chargement initial
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
-    logger.i('Foreground service started at $timestamp');
+    // logger.i('Foreground service started');
+
+    await _loadDevicesFromDb();
   }
 
-  /// Called based on the eventAction set in ForegroundTaskOptions
+  /// Tick périodique
   @override
-  void onRepeatEvent(DateTime timestamp) async {
-    final devices = ESPForegroundService().devices;
+  Future<void> onRepeatEvent(DateTime timestamp) async {
+    if (_devices.isEmpty) return;
 
-
-    for (var device in devices) {
+    for (final device in _devices) {
       final espService = ESPService(device: device);
       bool connected = false;
+      // logger.i('device name : ${device.name}');
 
       try {
         connected = await espService.checkConnection();
+        // logger.i('état : $connected');
       } catch (e) {
-        logger.e('Error checking ${device.name}: $e');
+        logger.e('Check failed for ${device.name}: $e');
       }
 
-      final last = _lastStates[device.hashCode];
+      final last = _lastStates[device.id];
 
       if (last == null || last != connected) {
-        _lastStates[device.hashCode] = connected;
+        _lastStates[device.id!] = connected;
 
-        // ⚡ Notification
         await NotificationService().show(
-          connected ? "ESP Connecté" : "ESP Déconnecté",
-          "${device.name} est ${connected ? "en ligne" : "hors ligne"}",
+          connected ? 'ESP Connecté' : 'ESP Déconnecté',
+          '${device.name} est ${connected ? "en ligne" : "hors ligne"}',
         );
 
-        // ⚡ Envoi de données vers l'UI
         FlutterForegroundTask.sendDataToMain({
           'device': device.name,
           'connected': connected,
         });
 
-        logger.i('${device.name} state changed: $connected');
+        // logger.i('${device.name} state changed: $connected');
       }
     }
   }
 
-  /// Called when the task is destroyed
+  /// Réception des ordres UI
+  @override
+  Future<void> onReceiveData(Object data) async {
+    if (data is Map && data['action'] == 'reload_devices') {
+      // logger.i('Reload devices requested');
+      await _loadDevicesFromDb();
+    }
+  }
+
+  /// Nettoyage
   @override
   Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {
-    logger.i('Foreground service stopped at $timestamp (timeout: $isTimeout)');
+    // logger.i('Foreground service stopped');
   }
 
-  /// Called when data is sent using `FlutterForegroundTask.sendDataToTask`
-  @override
-  void onReceiveData(Object data) {
-    logger.i('onReceiveData: $data');
-  }
+  /// -------------------------------
+  /// DB
+  /// -------------------------------
+  Future<void> _loadDevicesFromDb() async {
+    final rows = await DBHelper.getDevices();
 
-  /// Notification button pressed
-  @override
-  void onNotificationButtonPressed(String id) {
-    logger.i('Notification button pressed: $id');
-  }
+    _devices
+      ..clear()
+      ..addAll(
+        rows.map(
+          (row) => ESPDevice(
+            id: row['id'],
+            name: row['name'],
+            localIP: row['localIP'],
+            publicIP: row['publicIP'],
+          ),
+        ),
+      );
 
-  /// Notification itself pressed
-  @override
-  void onNotificationPressed() {
-    logger.i('Notification pressed');
-  }
+    _lastStates.clear(); // important
 
-  /// Notification dismissed
-  @override
-  void onNotificationDismissed() {
-    logger.i('Notification dismissed');
+    // logger.i('Devices loaded: ${_devices.length}');
   }
 }
