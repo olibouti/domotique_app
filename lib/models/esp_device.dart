@@ -1,6 +1,5 @@
 import 'esp_pin.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
+import '../services/db_helper.dart';
 
 class ESPDevice {
   final int? id;
@@ -17,28 +16,21 @@ class ESPDevice {
     List<ESPPin>? pins,
   }) : pins = pins ?? [];
 
-  /// Constructeur dédié SQLite / service
+  /// Constructeur depuis la DB sans pins
   factory ESPDevice.fromDb(Map<String, dynamic> map) {
     return ESPDevice(
-      id: map['id'],
-      name: map['name'],
-      localIP: map['localIP'],
-      publicIP: map['publicIP'],
+      id: map['id'] as int?,
+      name: map['name'] as String,
+      localIP: map['localIP'] as String,
+      publicIP: map['publicIP'] as String,
     );
   }
 
-  Future<Map<String, bool>> fetchLedStatus() async {
-    final url = Uri.parse('$localIP/status');
-    final response =
-        await http.get(url).timeout(const Duration(seconds: 3));
-
-    if (response.statusCode != 200) {
-      throw Exception('Erreur HTTP ${response.statusCode}');
-    }
-
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return data.map(
-      (key, value) => MapEntry(key, value == 1),
-    );
+  /// ⚡ Nouveau : constructeur async pour charger les pins depuis la DB
+  static Future<ESPDevice> fromDbWithPins(Map<String, dynamic> map) async {
+    final device = ESPDevice.fromDb(map);
+    final pinsData = await DBHelper.getPins(device.id!);
+    device.pins.addAll(pinsData.map((p) => ESPPin.fromDb(p)));
+    return device;
   }
 }

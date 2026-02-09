@@ -9,6 +9,9 @@ import 'services/network_service.dart';
 import 'models/esp_device.dart';
 import 'models/esp_pin.dart';
 import 'services/foreground_service.dart';
+import 'package:logger/logger.dart';
+
+final logger = Logger();
 
 
 
@@ -16,16 +19,22 @@ void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     // Charger tous les ESP de la BDD
     final devices = await DBHelper.getDevices();
+
     for (var d in devices) {
       final deviceId = d['id'];
       final pinsData = await DBHelper.getPins(deviceId);
-      final pins = pinsData.map((p) => ESPPin(
-        name: p['name'],
-        pin: p['pin'],
-        state: p['state'] == 1,
-      )).toList();
 
+      // Reconstruire les pins depuis la DB
+      final pins = pinsData.map((p) => ESPPin(
+            id: p['id'],
+            name: p['name'],
+            pin: p['pin'],
+            state: p['state'] == 1,
+          )).toList();
+
+      // Reconstruire l'objet ESPDevice
       final espDevice = ESPDevice(
+        id: deviceId,
         name: d['name'],
         localIP: d['localIP'],
         publicIP: d['publicIP'],
@@ -33,24 +42,39 @@ void callbackDispatcher() {
       );
 
       final espService = ESPService(device: espDevice);
+
       try {
-        final status = await espService.fetchLedStatus();
+        // ✅ fetchLedStatus renvoie List<ESPPin>
+        final fetchedPins = await espService.fetchLedStatus();
+
+        // Créer un map pour lookup rapide par pin
+        final statusMap = {for (var p in fetchedPins) p.pin: p.state};
+
         for (var pin in espDevice.pins) {
           final oldState = pin.state;
-          pin.state = status[pin.pin] ?? false;
+          pin.state = statusMap[pin.pin] ?? false;
+
           if (oldState != pin.state) {
-            await DBHelper.updatePinState(pins.indexOf(pin)+1, pin.state);
-            NotificationService().show(pin.name, "Nouvel état : ${pin.state ? "ON" : "OFF"}");
+            // Mettre à jour la DB avec l'id réel de la pin
+            await DBHelper.updatePinState(pin.id!, pin.state);
+            NotificationService().show(
+              pin.name,
+              "Nouvel état : ${pin.state ? "ON" : "OFF"}",
+            );
           }
         }
       } catch (e) {
-        NotificationService().show("Erreur", "Impossible de synchroniser ${espDevice.name}");
+        NotificationService().show(
+          "Erreur",
+          "Impossible de synchroniser ${espDevice.name}",
+        );
       }
     }
 
     return Future.value(true);
   });
 }
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

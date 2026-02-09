@@ -1,4 +1,4 @@
-package com.example.domotique_app
+package com.educpop.dome
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
 import '../models/esp_device.dart';
+import '../models/esp_pin.dart';
 import '../services/network_service.dart';
 import 'db_helper.dart';
 
@@ -12,45 +13,34 @@ class ESPService {
 
   ESPService({required this.device});
 
-Future<Uri> _getBaseUrl(String path) async {
-  final localUrl = Uri.parse('${device.localIP}$path');
-  final publicUrl = Uri.parse('${device.publicIP}$path');
+  // -----------------------------
+  // Choix de l'URL (locale / publique)
+  // -----------------------------
+  Future<Uri> _getBaseUrl(String path) async {
+    final localUrl = Uri.parse('${device.localIP}$path');
+    final publicUrl = Uri.parse('${device.publicIP}$path');
 
-  // 1️⃣ Tentative locale rapide
-  try {
-    final res = await http
-        .get(localUrl)
-        .timeout(const Duration(milliseconds: 800));
+    // 1️⃣ Tentative locale rapide
+    try {
+      final res = await http.get(localUrl).timeout(const Duration(milliseconds: 800));
+      if (res.statusCode == 200) {
+        return localUrl;
+      }
+    } catch (_) {}
 
-    if (res.statusCode == 200) {
-      logger.i('💡 URL locale OK : $localUrl');
-      return localUrl;
-    }
-  } catch (_) {
-    // silence volontaire
+    // 2️⃣ Fallback publique
+    return publicUrl;
   }
 
-  // 2️⃣ Fallback public
-  logger.i('💡 Fallback URL publique : $publicUrl');
-  return publicUrl;
-}
-
-
-
-
-
-
-
-  // =============================
-  // TOGGLE
-  // =============================
+  // -----------------------------
+  // TOGGLE pin (sortie)
+  // -----------------------------
   Future<bool> togglePin(String pin, bool turnOn) async {
     final state = turnOn ? "on" : "off";
     final url = await _getBaseUrl("/led?pin=$pin&state=$state");
 
     try {
-      final response =
-          await http.get(url).timeout(const Duration(seconds: 3));
+      final response = await http.get(url).timeout(const Duration(seconds: 3));
       return response.statusCode == 200;
     } catch (e) {
       logger.e("togglePin error: $e");
@@ -59,34 +49,42 @@ Future<Uri> _getBaseUrl(String path) async {
   }
 
   // =============================
-  // STATUS
-  // =============================
-  Future<Map<String, bool>> fetchLedStatus() async {
-    final url = await _getBaseUrl("/status");
+// FETCH STATUS
+// =============================
+Future<List<ESPPin>> fetchLedStatus() async {
+  final url = await _getBaseUrl("/status");
 
-    try {
-      final response =
-          await http.get(url).timeout(const Duration(seconds: 3));
-      if (response.statusCode != 200) {
-        throw Exception();
+  try {
+    final response =
+        await http.get(url).timeout(const Duration(seconds: 3));
+    if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final List<ESPPin> pins = [];
+
+    data.forEach((key, value) {
+      if (value is bool || value == 0 || value == 1) {
+        pins.add(ESPPin(name: key, pin: key, state: value == true || value == 1));
+      } else if (value is num) {
+        pins.add(ESPPin(name: key, pin: key, value: value.toDouble(), type: "SENSOR"));
       }
+    });
 
-      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-      return decoded.map((k, v) => MapEntry(k, v == 1));
-    } catch (e) {
-      logger.e("fetchLedStatus error: $e sur url -> $url");
-      return {};
-    }
+    return pins;
+  } catch (e) {
+    logger.e("fetchLedStatus error: $e sur url -> $url");
+    return [];
   }
+}
 
-  // =============================
-  // CHECK
-  // =============================
+
+  // -----------------------------
+  // CHECK CONNECTION
+  // -----------------------------
   Future<bool> checkConnection() async {
     try {
       final url = await _getBaseUrl("/status");
-      final response =
-          await http.get(url).timeout(const Duration(seconds: 2));
+      final response = await http.get(url).timeout(const Duration(seconds: 2));
       return response.statusCode == 200;
     } catch (_) {
       return false;

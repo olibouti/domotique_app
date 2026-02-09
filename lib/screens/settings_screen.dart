@@ -3,6 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../services/db_helper.dart';
 import '../models/esp_device.dart';
 import '../models/esp_pin.dart';
+import 'pinSetting_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -13,7 +14,19 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   List<Map<String, dynamic>> devices = [];
-  final TextEditingController wifiController = TextEditingController();
+  final TextEditingController wifiController = TextEditingController(text: "Livebox-9E9C");
+  TextEditingController localIpController = TextEditingController(text: "http://192.168.1."); 
+  TextEditingController publicIpController = TextEditingController(text: "https://irrigation-control.educpop.net"); 
+
+
+  @override
+void dispose() {
+  localIpController.dispose(); // toujours nettoyer le controller
+  publicIpController.dispose(); // toujours nettoyer le controller
+  wifiController.dispose(); // toujours nettoyer le controller
+  super.dispose();
+}
+
 
   @override
   void initState() {
@@ -64,10 +77,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (value) => name = value,
             ),
             TextField(
+              controller: localIpController,
               decoration: const InputDecoration(labelText: "IP locale"),
               onChanged: (value) => localIP = value,
             ),
             TextField(
+              controller: publicIpController,
               decoration: const InputDecoration(labelText: "IP publique"),
               onChanged: (value) => publicIP = value,
             ),
@@ -186,92 +201,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // ----------------- Gérer les pins -----------------
-  Future<void> _editPins(int deviceId) async {
-    final pinsData = await DBHelper.getPins(deviceId);
-    final List<String> gpioOptions = ['D0','D1','D2','D3','D4','D5','D6','D7','D8'];
-    List<ESPPin> pins = pinsData.map((p) => ESPPin(
-      name: p['name'],
-      pin: p['pin'],
-      state: p['state']==1,
-      iconName: p['iconName']??'device_hub',
-    )).toList();
+Future<void> _editPins(int deviceId) async {
+  final result = await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => PinsSettingsScreen(deviceId: deviceId),
+    ),
+  );
 
-    await showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setStateDialog) => AlertDialog(
-          title: const Text("Gérer les pins"),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: pins.length,
-              itemBuilder: (_, index) {
-                final pin = pins[index];
-                return SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 200,
-                        child: TextField(
-                          controller: TextEditingController(text: pin.name),
-                          onChanged: (value) => pin.name = value,
-                          decoration: const InputDecoration(labelText: "Nom de la pin"),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 100,
-                        child: DropdownButton<String>(
-                          value: pin.pin,
-                          isExpanded: true,
-                          items: gpioOptions.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
-                          onChanged: (value){if(value!=null)setStateDialog(()=>pin.pin=value);},
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 150,
-                        child: DropdownButton<String>(
-                          value: pin.iconName,
-                          isExpanded: true,
-                          items: [
-                            'device_hub','bolt','power','water_drop','water_pump','pool','fan','motor','ac_unit','lightbulb','flash_on','heating'
-                          ].map((iconStr)=>DropdownMenuItem(
-                            value: iconStr,
-                            child: Row(children:[Icon(_iconFromString(iconStr)), const SizedBox(width:8), Text(iconStr)]),
-                          )).toList(),
-                          onChanged: (value){if(value!=null)setStateDialog(()=>pin.iconName=value);},
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: (){setStateDialog(()=>pins.removeAt(index));},
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: ()=>Navigator.pop(context), child: const Text("Annuler")),
-            TextButton(onPressed: ()async{
-              final db = await DBHelper.getDb();
-              await db.delete('pins', where:'deviceId=?', whereArgs:[deviceId]);
-              for(var pin in pins) await DBHelper.insertPin(pin, deviceId);
-              Navigator.pop(context);
-              _loadDevices();
-            }, child: const Text("Enregistrer")),
-            TextButton(onPressed: (){
-              setStateDialog(()=>pins.add(ESPPin(name:"Nouvelle pin", pin:"D${pins.length}")));
-            }, child: const Text("Ajouter pin")),
-          ],
-        ),
-      ),
-    );
+  if (result == true) {
+    _loadDevices();
   }
+}
+
 
   // ----------------- Build -----------------
   @override
@@ -305,7 +247,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
-
           const SizedBox(height: 16),
 
           // ⚡ Liste des devices

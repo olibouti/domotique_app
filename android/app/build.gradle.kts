@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.domotique_app"
+    namespace = "com.educpop.dome"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 

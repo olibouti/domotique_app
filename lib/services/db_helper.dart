@@ -2,6 +2,9 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/esp_device.dart';
 import '../models/esp_pin.dart';
+import 'package:logger/logger.dart';  
+
+final logger = Logger();
 
 class DBHelper {
   static Database? _db;
@@ -12,7 +15,7 @@ class DBHelper {
 
     _db = await openDatabase(
       join(await getDatabasesPath(), 'domotique.db'),
-      version: 2, // version 2 pour inclure wifi
+      version: 3, // version 3 pour ajouter type, sensorType et value
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE devices(
@@ -29,6 +32,9 @@ class DBHelper {
             name TEXT,
             pin TEXT,
             state INTEGER,
+            value REAL,
+            type TEXT DEFAULT 'OUTPUT',
+            sensorType TEXT,
             iconName TEXT DEFAULT 'device_hub',
             deviceId INTEGER,
             FOREIGN KEY(deviceId) REFERENCES devices(id)
@@ -52,6 +58,12 @@ class DBHelper {
             )
           ''');
         }
+        if (oldVersion < 3) {
+          // Ajouter les colonnes type, sensorType, value
+          await db.execute('ALTER TABLE pins ADD COLUMN type TEXT DEFAULT "OUTPUT"');
+          await db.execute('ALTER TABLE pins ADD COLUMN sensorType TEXT');
+          await db.execute('ALTER TABLE pins ADD COLUMN value REAL');
+        }
       },
     );
     return _db!;
@@ -73,20 +85,29 @@ class DBHelper {
   }
 
   // ----------------- Pins -----------------
-  static Future<int> insertPin(ESPPin pin, int deviceId) async {
-    final db = await getDb();
-    return await db.insert('pins', {
-      'name': pin.name,
-      'pin': pin.pin,
-      'state': pin.state ? 1 : 0,
-      'deviceId': deviceId,
-      'iconName': pin.iconName,
-    });
-  }
+ static Future<int> insertPin(ESPPin pin, int deviceId) async {
+  final db = await getDb();
+  print('>>> insertPin called for deviceId=$deviceId, pin=${pin.name}, type=${pin.type}, sensorType=${pin.sensorType}');
+  return await db.insert('pins', {
+    'name': pin.name,
+    'pin': pin.pin,
+    'state': pin.state ? 1 : 0,
+    'value': pin.value,
+    'type': pin.type,
+    'sensorType': pin.sensorType,
+    'iconName': pin.iconName,
+    'deviceId': deviceId,
+  });
+}
+
 
   static Future<List<Map<String, dynamic>>> getPins(int deviceId) async {
     final db = await getDb();
-    return await db.query('pins', where: 'deviceId=?', whereArgs: [deviceId]);
+    return await db.query(
+      'pins',
+      where: 'deviceId=?',
+      whereArgs: [deviceId],
+    );
   }
 
   static Future<void> updatePinState(int id, bool state) async {
@@ -99,22 +120,37 @@ class DBHelper {
     );
   }
 
+  static Future<void> updatePin(ESPPin pin, int id) async {
+    final db = await getDb();
+    await db.update(
+      'pins',
+      {
+        'name': pin.name,
+        'pin': pin.pin,
+        'state': pin.state == true ? 1 : 0,
+        'value': pin.value,
+        'type': pin.type,
+        'sensorType': pin.sensorType,
+        'iconName': pin.iconName,
+      },
+      where: 'id=?',
+      whereArgs: [id],
+    );
+  }
+
   // ----------------- Wi-Fi -----------------
   static Future<void> setWifiName(String ssid) async {
     final db = await getDb();
 
     // On supprime l'ancien ssid pour n'avoir qu'une seule entrée
     await db.delete('wifi');
-
     await db.insert('wifi', {'ssid': ssid});
   }
 
   static Future<String?> getWifiName() async {
     final db = await getDb();
     final list = await db.query('wifi', limit: 1);
-    if (list.isNotEmpty) {
-      return list.first['ssid'] as String;
-    }
+    if (list.isNotEmpty) return list.first['ssid'] as String;
     return null;
   }
 }

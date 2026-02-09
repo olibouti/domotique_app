@@ -14,7 +14,7 @@
 
 
     <application
-        android:label="domotique_app"
+        android:label="DomE"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
