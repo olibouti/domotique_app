@@ -1,12 +1,12 @@
 class ESPPin {
   int? id;
   String name;
-  String pin;
+  String pin;         // ex: D0, D1...
   bool state;         // pour les sorties ON/OFF
-  String iconName;
-  String type;        // "OUTPUT" ou "SENSOR"
-  String? sensorType; // ex: "temperature", "distance"
-  double? value;      // valeur mesurée pour les capteurs
+  String iconName;    // icône Material / Symbols
+  String type;        // OUTPUT, INPUT_DIGITAL, INPUT_ANALOG, SENSOR_DHT, SENSOR_ULTRASONIC, SENSOR_DS18B20
+  String? sensorType; // ex: "DHT22", "HC-SR04", "DS18B20"
+  double? value;      // valeur mesurée pour les capteurs, ou double.nan si inaccessible
 
   ESPPin({
     required this.name,
@@ -19,20 +19,25 @@ class ESPPin {
     this.value,
   });
 
-  /// Méthode pratique pour créer une ESPPin depuis la DB
+  /// Crée un ESPPin depuis la DB en sécurisant les types et valeurs
   factory ESPPin.fromDb(Map<String, dynamic> map) {
     return ESPPin(
-      name: map['name'],
-      pin: map['pin'],
-      state: map['state'] == 1,
-      iconName: map['iconName'] ?? 'device_hub',
-      type: map['type'] ?? 'OUTPUT',
-      sensorType: map['sensorType'],
-      value: map['value'] != null ? (map['value'] as num).toDouble() : null,
+      id: map['id'] as int?,
+      name: map['name'] as String? ?? 'Pin',
+      pin: map['pin'] as String? ?? 'D0',
+      state: (map['state'] ?? 0) == 1,
+      iconName: map['iconName'] as String? ?? 'device_hub',
+      type: map['type'] as String? ?? 'OUTPUT',
+      sensorType: map['sensorType'] as String?,
+      value: map['value'] != null
+          ? (map['value'] is num
+              ? (map['value'] as num).toDouble()
+              : double.nan)
+          : null,
     );
   }
 
-  /// Convertir en Map pour l'insertion / mise à jour DB
+  /// Convertit en Map pour l'insertion ou mise à jour dans la DB
   Map<String, dynamic> toDbMap({int? deviceId}) {
     return {
       'name': name,
@@ -45,4 +50,13 @@ class ESPPin {
       if (deviceId != null) 'deviceId': deviceId,
     };
   }
+
+  /// Indique si c'est un capteur (SENSOR_*)
+  bool get isSensor =>
+      type == 'SENSOR_DHT' ||
+      type == 'SENSOR_ULTRASONIC' ||
+      type == 'SENSOR_DS18B20';
+
+  /// Indique si c'est une sortie ON/OFF
+  bool get isOutput => type == 'OUTPUT';
 }

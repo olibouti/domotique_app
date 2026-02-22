@@ -27,26 +27,32 @@ class _PinsSettingsScreenState extends State<PinsSettingsScreen> {
     'D8',
   ];
 
+  // ----------------------------- TYPES PIN -----------------------------
   final Map<String, String> pinTypeMap = {
     "Sortie": "OUTPUT",
     "Entrée digitale": "INPUT_DIGITAL",
     "Entrée analogique": "INPUT_ANALOG",
     "Capteur DHT": "SENSOR_DHT",
     "Capteur Ultrason": "SENSOR_ULTRASONIC",
+    "Capteur DS18B20": "SENSOR_DS18B20",
   };
   late final Map<String, String> pinTypeMapFr = {
     for (var e in pinTypeMap.entries) e.value: e.key,
   };
 
+  // ----------------------------- TYPES CAPTEURS -----------------------------
   final Map<String, List<String>> sensorTypeMap = {
     "SENSOR_DHT": ["DHT22"],
     "SENSOR_ULTRASONIC": ["HC-SR04"],
+    "SENSOR_DS18B20": ["DS18B20"],
   };
   late final Map<String, String> sensorTypeMapFr = {
     "DHT22": "DHT22",
     "HC-SR04": "Ultrason",
+    "DS18B20": "DS18B20",
   };
 
+  // ----------------------------- ICÔNES -----------------------------
   final Map<String, String> iconOptionsMap = {
     'device_hub': 'Hub',
     'bolt': 'Éclair',
@@ -120,12 +126,11 @@ class _PinsSettingsScreenState extends State<PinsSettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Configuration des pins"),
-        actions: [IconButton(icon: const Icon(Icons.save),  onPressed: () async {  await _save(); },)],
+        actions: [IconButton(icon: const Icon(Icons.save), onPressed: _save)],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           setState(() {
-            // Nouvelle pin par défaut OUTPUT
             pins.add(ESPPin(name: "Nouvelle pin", pin: "D0", type: "OUTPUT"));
           });
         },
@@ -191,21 +196,18 @@ class _PinsSettingsScreenState extends State<PinsSettingsScreen> {
                     onChanged: (v) {
                       if (v != null) {
                         setState(() {
-                          // Met à jour le type réel
                           pin.type = pinTypeMap[v]!;
 
-                          // Si ce n’est plus un capteur, on reset sensorType
+                          // Reset sensorType si ce n’est plus un capteur
                           if (!sensorTypeMap.containsKey(pin.type)) {
                             pin.sensorType = null;
                           } else {
-                            // Si c’est un capteur, on assigne le sensorType par défaut si null
                             pin.sensorType ??= sensorTypeMap[pin.type]!.first;
                           }
                         });
                       }
                     },
                   ),
-
                   const SizedBox(height: 12),
 
                   // Type capteur (si applicable)
@@ -227,12 +229,12 @@ class _PinsSettingsScreenState extends State<PinsSettingsScreen> {
                           )
                           .toList(),
                       onChanged: (v) {
-                        if (v != null)
+                        if (v != null) {
                           setState(() {
-                            // Corrige le mapping pour ne chercher que dans le type actuel
                             pin.sensorType = sensorTypeMap[pin.type]!
                                 .firstWhere((esp) => sensorTypeMapFr[esp] == v);
                           });
+                        }
                       },
                     ),
                   const SizedBox(height: 12),
@@ -265,6 +267,7 @@ class _PinsSettingsScreenState extends State<PinsSettingsScreen> {
 
                   const SizedBox(height: 12),
 
+                  // Supprimer pin
                   Align(
                     alignment: Alignment.centerRight,
                     child: IconButton(
