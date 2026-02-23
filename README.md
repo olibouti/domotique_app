@@ -1,9 +1,9 @@
 # Domotique App
 
-Domotique App est une application Flutter multiplateforme (Android, iOS, Web, Desktop) permettant de contrôler et configurer des dispositifs ESP (IoT) pour la domotique.
+Domotique App est une application Flutter multiplateforme (Android, iOS) permettant de contrôler et configurer des dispositifs ESP (IoT) pour la domotique.
 
 ## Fonctionnalités principales
-- Découverte et gestion de dispositifs ESP
+- Détection et gestion de dispositifs ESP connectés au réseau local
 - Contrôle des pins et réglages personnalisés
 - Notifications locales
 - Gestion de la connectivité réseau
@@ -35,14 +35,6 @@ lib/
    - Android/iOS :
      ```bash
      flutter run
-     ```
-   - Web :
-     ```bash
-     flutter run -d chrome
-     ```
-   - Desktop :
-     ```bash
-     flutter run -d windows # ou macos/linux selon la plateforme
      ```
 
 ## Dépendances principales
