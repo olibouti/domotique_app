@@ -18,7 +18,7 @@ class ESPForegroundService {
   factory ESPForegroundService() => _instance;
   ESPForegroundService._internal();
 
-  Future<void> start({int intervalSeconds = 10}) async {
+  Future<void> start({int intervalSeconds = 1800}) async {
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'esp_monitoring',

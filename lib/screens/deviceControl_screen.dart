@@ -32,8 +32,9 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
     espService = ESPService(device: device);
     NotificationService().initNotifications();
     _loadStatus();
+    _initializeDevice();
 
-    // ⚡ rafraîchissement automatique toutes les 5 secondes
+    // Rafraîchissement automatique toutes les 5 secondes
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) => _loadStatus());
   }
 
@@ -42,6 +43,14 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
     _refreshTimer?.cancel();
     super.dispose();
   }
+
+  Future<void> _initializeDevice() async {
+  await espService.configureAllPins(device.pins);
+  await _loadStatus();
+
+  _refreshTimer =
+      Timer.periodic(const Duration(seconds: 5), (_) => _loadStatus());
+}
 
   Future<void> _loadStatus() async {
     try {
@@ -61,11 +70,11 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
     } catch (e) {
       setState(() {
         loading = false;
-        // ⚡ Si c’est un HTTP 502, on marque les capteurs comme inaccessibles
+        // Si c’est un HTTP 502, on marque les capteurs comme inaccessibles
         if (e.toString().contains("HTTP 502")) {
           for (var pin in device.pins) {
             if (pin.type != "OUTPUT") {
-              pin.value = double.nan; // on utilise NaN comme indicateur
+              pin.value = double.nan;
             }
           }
         }
@@ -79,7 +88,7 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
   }
 
   Future<void> _togglePin(ESPPin pin) async {
-    if (pin.type != "OUTPUT") return; // seuls les OUTPUT sont toggleables
+    if (pin.type != "OUTPUT") return;
 
     try {
       final success = await espService.togglePin(pin.pin, !pin.state);
@@ -101,43 +110,42 @@ class _DeviceControlScreenState extends State<DeviceControlScreen> {
     }
   }
 
-String _formatPinValue(ESPPin pin) {
+  String _formatPinValue(ESPPin pin) {
+    // OUTPUT
+    if (pin.type == "OUTPUT") {
+      return pin.state ? "Allumé" : "Éteint";
+    }
 
-  // Pour les sorties
-  if (pin.type == "OUTPUT") {
-    return pin.state ? "Allumé" : "Éteint";
-  }
+    // Capteurs
+    if (pin.type.startsWith("SENSOR")) {
+      if (pin.value == null) return "Valeur inconnue";
+      if (pin.value!.isNaN) return "Capteur inaccessible";
 
-  // Pour les capteurs
-  if (pin.type == "SENSOR") {
+      switch (pin.sensorType) {
+        case "DHT22":
+          return "${pin.value!.toStringAsFixed(1)} °C";
+        case "HC-SR04":
+          return "${pin.value!.toStringAsFixed(0)} cm";
+        case "DS18B20":
+          return "${pin.value!.toStringAsFixed(1)} °C";
+        default:
+          return pin.value!.toString();
+      }
+    }
+
+    // Entrées digitales/analogiques
     if (pin.value == null) return "Valeur inconnue";
-    if (pin.value!.isNaN) return "Capteur inaccessible";
+    if (pin.value!.isNaN) return "Valeur invalide";
 
-    switch (pin.sensorType) {
-      case "DHT22":
-        return "${pin.value!.toStringAsFixed(1)} °C";
-      case "HC-SR04":
-        return "${pin.value!.toStringAsFixed(0)} cm";
+    switch (pin.type) {
+      case "INPUT_DIGITAL":
+        return pin.value! > 0 ? "Haut" : "Bas";
+      case "INPUT_ANALOG":
+        return pin.value!.toStringAsFixed(0);
       default:
         return pin.value!.toString();
     }
   }
-
-  // Pour les entrées digitales ou analogiques si jamais tu ajoutes un jour
-  if (pin.value == null) return "Valeur inconnue";
-  if (pin.value!.isNaN) return "Valeur invalide";
-
-  switch (pin.type) {
-    case "INPUT_DIGITAL":
-      return pin.value! > 0 ? "Haut" : "Bas";
-    case "INPUT_ANALOG":
-      return pin.value!.toStringAsFixed(0);
-    default:
-      return pin.value!.toString();
-  }
-}
-
-
 
   @override
   Widget build(BuildContext context) {
